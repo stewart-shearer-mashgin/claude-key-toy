@@ -1,24 +1,178 @@
+# Toy of mashgin/ci/.github/workflows/ai-review.yml — same shape: reusable
+# workflow, 4 cascading gates (architecture -> product -> tests -> security),
+# enable-*/manual-trigger toggles, shared CLAUDE_CODE_OAUTH_TOKEN via
+# secrets: inherit. The gate body (which in real mashgin/ci is a `docker run`
+# of the review image invoking `claude -p "/mash-review-<stage>"`) is stubbed.
+#
+# Deviations from real, for a personal (enterprise-managed) account:
+#   - product runs on ubuntu-latest (real: [self-hosted, Linux, X64, shell])
+#   - the run-ai-review-gate composite action is INLINED as steps here, because
+#     custom cross-repo actions are blocked by enterprise policy on this account
+#     (GitHub-authored actions and reusable workflows are allowed, custom
+#     composite actions are not).
 name: AI Review (toy)
+
 on:
   workflow_call:
     inputs:
-      claude-model: {required: false, type: string, default: "claude-sonnet-4-6"}
-      skip-label: {required: false, type: string, default: "skip-ai-review"}
-      enable-architecture: {required: false, type: boolean, default: true}
-      manual-trigger: {required: false, type: string, default: "true"}
+      claude-model:
+        required: false
+        type: string
+        default: "claude-sonnet-4-6"
+      app-url:
+        required: false
+        type: string
+        default: ""
+      skip-label:
+        required: false
+        type: string
+        default: "skip-ai-review"
+      enable-architecture:
+        required: false
+        type: boolean
+        default: true
+      enable-product:
+        required: false
+        type: boolean
+        default: false
+      enable-tests:
+        required: false
+        type: boolean
+        default: false
+      enable-security:
+        required: false
+        type: boolean
+        default: false
+      manual-trigger:
+        required: false
+        type: string
+        default: "true"
     secrets:
-      CLAUDE_CODE_OAUTH_TOKEN: {required: false}
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+
 permissions:
   contents: read
   pull-requests: write
+
+concurrency:
+  group: ${{ format('ai-review-toy-{0}-{1}', github.repository, github.event.pull_request.number || github.run_id) }}
+  cancel-in-progress: true
+
 jobs:
   ai-review-architecture:
     name: AI Review Architecture
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      ${{ github.event_name == 'pull_request'
+        && inputs.enable-architecture
+        && !github.event.pull_request.draft
+        && !contains(github.event.pull_request.labels.*.name, inputs.skip-label) }}
     steps:
-      - name: gate
+      - name: Run gate (architecture)
         env:
+          REVIEW_STAGE: architecture
+          MR_NUMBER: ${{ github.event.pull_request.number }}
+          CLAUDE_MODEL: ${{ inputs.claude-model }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           CLAUDE_OAUTH_INPUT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
+          set -euo pipefail
+          if [ -z "${CLAUDE_OAUTH_INPUT:-}" ]; then echo "ERROR: Set claude-code-oauth-token."; exit 1; fi
           FP="$(printf '%s' "$CLAUDE_OAUTH_INPUT" | sha256sum | cut -c1-12)"
-          echo "architecture gate PR#${{ github.event.pull_request.number }} auth=$FP"
+          echo "=== gate stage='${REVIEW_STAGE}' PR#${MR_NUMBER} repo=${GITHUB_REPOSITORY} ==="
+          echo "  Model: ${CLAUDE_MODEL}   Auth: CLAUDE_CODE_OAUTH_TOKEN (sha256_prefix=${FP})"
+          echo "  [stub] docker run review -> claude -p 'Run /mash-review-${REVIEW_STAGE} ${MR_NUMBER}'"
+          echo "  [stub] stage '${REVIEW_STAGE}' PASSED (0 blocking findings)"
+
+  ai-review-product:
+    name: AI Review Product
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [ai-review-architecture]
+    continue-on-error: ${{ inputs.manual-trigger == 'true' }}
+    if: >-
+      ${{ always() && !cancelled()
+        && github.event_name == 'pull_request'
+        && inputs.enable-product
+        && !github.event.pull_request.draft
+        && !contains(github.event.pull_request.labels.*.name, inputs.skip-label)
+        && (needs.ai-review-architecture.result == 'success' || needs.ai-review-architecture.result == 'skipped') }}
+    steps:
+      - name: Run gate (product)
+        env:
+          REVIEW_STAGE: product
+          MR_NUMBER: ${{ github.event.pull_request.number }}
+          CLAUDE_MODEL: ${{ inputs.claude-model }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          APP_URL: ${{ inputs.app-url }}
+          CLAUDE_OAUTH_INPUT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLAUDE_OAUTH_INPUT:-}" ]; then echo "ERROR: Set claude-code-oauth-token."; exit 1; fi
+          FP="$(printf '%s' "$CLAUDE_OAUTH_INPUT" | sha256sum | cut -c1-12)"
+          echo "=== gate stage='${REVIEW_STAGE}' PR#${MR_NUMBER} repo=${GITHUB_REPOSITORY} ==="
+          echo "  Model: ${CLAUDE_MODEL}   Auth: CLAUDE_CODE_OAUTH_TOKEN (sha256_prefix=${FP})   App URL: ${APP_URL:-<none>}"
+          echo "  [stub] docker run review -> claude -p 'Run /mash-review-${REVIEW_STAGE} ${MR_NUMBER}'"
+          echo "  [stub] stage '${REVIEW_STAGE}' PASSED (0 blocking findings)"
+
+  ai-review-tests:
+    name: AI Review Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [ai-review-product]
+    continue-on-error: ${{ inputs.manual-trigger == 'true' }}
+    if: >-
+      ${{ always() && !cancelled()
+        && github.event_name == 'pull_request'
+        && inputs.enable-tests
+        && !github.event.pull_request.draft
+        && !contains(github.event.pull_request.labels.*.name, inputs.skip-label)
+        && (needs.ai-review-product.result == 'success' || needs.ai-review-product.result == 'skipped') }}
+    steps:
+      - name: Run gate (test-legitimacy)
+        env:
+          REVIEW_STAGE: test-legitimacy
+          MR_NUMBER: ${{ github.event.pull_request.number }}
+          CLAUDE_MODEL: ${{ inputs.claude-model }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CLAUDE_OAUTH_INPUT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLAUDE_OAUTH_INPUT:-}" ]; then echo "ERROR: Set claude-code-oauth-token."; exit 1; fi
+          FP="$(printf '%s' "$CLAUDE_OAUTH_INPUT" | sha256sum | cut -c1-12)"
+          echo "=== gate stage='${REVIEW_STAGE}' PR#${MR_NUMBER} repo=${GITHUB_REPOSITORY} ==="
+          echo "  Model: ${CLAUDE_MODEL}   Auth: CLAUDE_CODE_OAUTH_TOKEN (sha256_prefix=${FP})"
+          echo "  [stub] docker run review -> claude -p 'Run /mash-review-fake-tests + poor-stubs + test-drift + too-many-tests ${MR_NUMBER}'"
+          echo "  [stub] stage '${REVIEW_STAGE}' PASSED (0 blocking findings)"
+
+  ai-review-security:
+    name: AI Review Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [ai-review-tests]
+    continue-on-error: ${{ inputs.manual-trigger == 'true' }}
+    if: >-
+      ${{ always() && !cancelled()
+        && github.event_name == 'pull_request'
+        && inputs.enable-security
+        && !github.event.pull_request.draft
+        && !contains(github.event.pull_request.labels.*.name, inputs.skip-label)
+        && (needs.ai-review-tests.result == 'success' || needs.ai-review-tests.result == 'skipped') }}
+    steps:
+      - name: Run gate (security)
+        env:
+          REVIEW_STAGE: security
+          MR_NUMBER: ${{ github.event.pull_request.number }}
+          CLAUDE_MODEL: ${{ inputs.claude-model }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CLAUDE_OAUTH_INPUT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLAUDE_OAUTH_INPUT:-}" ]; then echo "ERROR: Set claude-code-oauth-token."; exit 1; fi
+          FP="$(printf '%s' "$CLAUDE_OAUTH_INPUT" | sha256sum | cut -c1-12)"
+          echo "=== gate stage='${REVIEW_STAGE}' PR#${MR_NUMBER} repo=${GITHUB_REPOSITORY} ==="
+          echo "  Model: ${CLAUDE_MODEL}   Auth: CLAUDE_CODE_OAUTH_TOKEN (sha256_prefix=${FP})"
+          echo "  [stub] docker run review -> claude -p 'Run /mash-review-${REVIEW_STAGE} ${MR_NUMBER}'"
+          echo "  [stub] stage '${REVIEW_STAGE}' PASSED (0 blocking findings)"
