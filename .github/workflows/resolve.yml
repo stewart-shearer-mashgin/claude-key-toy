@@ -1,0 +1,23 @@
+name: resolve token (reusable)
+
+# The toy analog of mashgin/ci's ai-review reusable workflow. A product repo
+# calls this with the PR author's login; it resolves that author's token from
+# the committed store (or falls back / reports expiry) and prints the verdict.
+# In the real thing the verdict would become CLAUDE_CODE_OAUTH_TOKEN for the
+# review; here we just echo which token CI would use.
+on:
+  workflow_call:
+    inputs:
+      author:
+        required: true
+        type: string
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve the author's token
+        run: |
+          echo "PR author: ${{ inputs.author }}"
+          python3 keydemo.py resolve "${{ inputs.author }}"

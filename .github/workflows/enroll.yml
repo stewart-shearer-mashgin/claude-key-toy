@@ -1,0 +1,33 @@
+name: enroll (toy)
+
+# Toy self-service enrollment: pick a login + TTL, it writes the store and
+# commits it. No age/secrets/PAT — this is a demo, tokens are fake and the
+# store is committed in plaintext on purpose so you can see it.
+on:
+  workflow_dispatch:
+    inputs:
+      login:
+        description: GitHub login to enroll
+        required: true
+      ttl:
+        description: Seconds until the entry expires (120 = watch it lapse)
+        required: false
+        default: "120"
+
+permissions:
+  contents: write
+
+jobs:
+  enroll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enroll and commit the store
+        run: |
+          python3 keydemo.py enroll "${{ inputs.login }}" --ttl ${{ inputs.ttl }}
+          cat store.json
+          git config user.name  "toy-enroll-bot"
+          git config user.email "toy-enroll-bot@users.noreply.github.com"
+          git add store.json
+          git commit -m "enroll ${{ inputs.login }} (ttl ${{ inputs.ttl }}s)" || echo "no change"
+          git push
