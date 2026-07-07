@@ -1,1 +1,8 @@
-{"keys": {}}
+{
+  "keys": {
+    "alice": {
+      "token": "tok-alice-347",
+      "expires": 1783400527.533245
+    }
+  }
+}
