@@ -1,167 +1,31 @@
-# Toy of mashgin/ci/.github/workflows/ai-review.yml — same shape (reusable
-# workflow, 4 cascading gates, enable-*/manual-trigger toggles, gate composite
-# action, shared CLAUDE_CODE_OAUTH_TOKEN via secrets: inherit). The only thing
-# faked is the gate's `docker run claude` (stubbed in the composite action).
-#
-# Deviations from real, for a personal account with no self-hosted runner:
-#   - product gate runs on ubuntu-latest (real: [self-hosted, Linux, X64, shell])
-#   - gate action reference points at this repo instead of mashgin/ci
 name: AI Review (toy)
-
 on:
   workflow_call:
     inputs:
-      review-image:
-        required: false
-        type: string
-        default: "ghcr.io/mashgin/ai-skills/review:latest"
-      app-url:
-        required: false
-        type: string
-        default: ""
-      ai-skills-branch:
-        required: false
-        type: string
-        default: "main"
       claude-model:
         required: false
         type: string
         default: "claude-sonnet-4-6"
-      skip-label:
-        required: false
-        type: string
-        default: "skip-ai-review"
-      enable-product:
-        required: false
-        type: boolean
-        default: false
-      enable-tests:
-        required: false
-        type: boolean
-        default: false
       enable-architecture:
         required: false
         type: boolean
         default: true
-      enable-security:
-        required: false
-        type: boolean
-        default: false
-      manual-trigger:
-        required: false
-        type: string
-        default: "true"
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: false
-
 permissions:
   contents: read
   pull-requests: write
-
-concurrency:
-  group: ${{ format('ai-review-toy-{0}-{1}', github.repository, github.event.pull_request.number || github.run_id) }}
-  cancel-in-progress: true
-
-env:
-  GATE: stewart-shearer-mashgin/claude-key-toy/github/actions/run-ai-review-gate@main
-
 jobs:
-  # Gate 1: architecture — always automatic when enabled.
   ai-review-architecture:
     name: AI Review Architecture
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: >-
-      ${{ github.event_name == 'pull_request'
-        && inputs.enable-architecture
-        && !github.event.pull_request.draft
-        && !contains(github.event.pull_request.labels.*.name, inputs.skip-label) }}
+    if: ${{ inputs.enable-architecture }}
     steps:
       - name: Run gate
         uses: stewart-shearer-mashgin/claude-key-toy/github/actions/run-ai-review-gate@main
         with:
           review-stage: architecture
-          git-user: auto-architecture-review
-          mr-number: ${{ github.event.pull_request.number }}
-          claude-model: ${{ inputs.claude-model }}
-          github-repository: ${{ github.repository }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
-  # Gate 2: product — cascades after architecture.
-  ai-review-product:
-    name: AI Review Product
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [ai-review-architecture]
-    continue-on-error: ${{ inputs.manual-trigger == 'true' }}
-    if: >-
-      ${{ always() && !cancelled()
-        && github.event_name == 'pull_request'
-        && inputs.enable-product
-        && !github.event.pull_request.draft
-        && !contains(github.event.pull_request.labels.*.name, inputs.skip-label)
-        && (needs.ai-review-architecture.result == 'success' || needs.ai-review-architecture.result == 'skipped') }}
-    steps:
-      - name: Run gate
-        uses: stewart-shearer-mashgin/claude-key-toy/github/actions/run-ai-review-gate@main
-        with:
-          review-stage: product
-          git-user: auto-product-review
-          mr-number: ${{ github.event.pull_request.number }}
-          claude-model: ${{ inputs.claude-model }}
-          app-url: ${{ inputs.app-url }}
-          github-repository: ${{ github.repository }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
-  # Gate 3: tests — cascades after product.
-  ai-review-tests:
-    name: AI Review Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [ai-review-product]
-    continue-on-error: ${{ inputs.manual-trigger == 'true' }}
-    if: >-
-      ${{ always() && !cancelled()
-        && github.event_name == 'pull_request'
-        && inputs.enable-tests
-        && !github.event.pull_request.draft
-        && !contains(github.event.pull_request.labels.*.name, inputs.skip-label)
-        && (needs.ai-review-product.result == 'success' || needs.ai-review-product.result == 'skipped') }}
-    steps:
-      - name: Run gate
-        uses: stewart-shearer-mashgin/claude-key-toy/github/actions/run-ai-review-gate@main
-        with:
-          review-stage: test-legitimacy
-          git-user: auto-tests-review
-          mr-number: ${{ github.event.pull_request.number }}
-          claude-model: ${{ inputs.claude-model }}
-          github-repository: ${{ github.repository }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
-  # Gate 4: security — cascades after tests.
-  ai-review-security:
-    name: AI Review Security
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [ai-review-tests]
-    continue-on-error: ${{ inputs.manual-trigger == 'true' }}
-    if: >-
-      ${{ always() && !cancelled()
-        && github.event_name == 'pull_request'
-        && inputs.enable-security
-        && !github.event.pull_request.draft
-        && !contains(github.event.pull_request.labels.*.name, inputs.skip-label)
-        && (needs.ai-review-tests.result == 'success' || needs.ai-review-tests.result == 'skipped') }}
-    steps:
-      - name: Run gate
-        uses: stewart-shearer-mashgin/claude-key-toy/github/actions/run-ai-review-gate@main
-        with:
-          review-stage: security
-          git-user: auto-security-review
           mr-number: ${{ github.event.pull_request.number }}
           claude-model: ${{ inputs.claude-model }}
           github-repository: ${{ github.repository }}
