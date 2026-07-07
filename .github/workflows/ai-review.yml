@@ -8,6 +8,9 @@ on:
       manual-trigger: {required: false, type: string, default: "true"}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: {required: false}
+permissions:
+  contents: read
+  pull-requests: write
 jobs:
   ai-review-architecture:
     name: AI Review Architecture
