@@ -16,7 +16,13 @@ jobs:
   resolve:
     runs-on: ubuntu-latest
     steps:
+      # A reusable workflow runs in the CALLER's context, so a bare checkout
+      # would grab the app repo. Explicitly check out central (where keydemo.py
+      # + store.json live). Central is public, so no token needed.
       - uses: actions/checkout@v4
+        with:
+          repository: stewart-shearer-mashgin/claude-key-toy
+          ref: main
       - name: Resolve the author's token
         run: |
           echo "PR author: ${{ inputs.author }}"
