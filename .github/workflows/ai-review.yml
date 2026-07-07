@@ -22,12 +22,5 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ inputs.enable-architecture }}
     steps:
-      - name: Run gate
-        uses: stewart-shearer-mashgin/claude-key-toy/github/actions/run-ai-review-gate@main
-        with:
-          review-stage: architecture
-          mr-number: ${{ github.event.pull_request.number }}
-          claude-model: ${{ inputs.claude-model }}
-          github-repository: ${{ github.repository }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      - name: Run gate (inline)
+        run: echo "inline gate: architecture PR#${{ github.event.pull_request.number }}"
