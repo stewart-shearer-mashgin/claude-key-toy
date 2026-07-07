@@ -3,8 +3,28 @@ on:
   workflow_call:
     inputs:
       claude-model: {required: false, type: string, default: "claude-sonnet-4-6"}
+      skip-label: {required: false, type: string, default: "skip-ai-review"}
+      enable-architecture: {required: false, type: boolean, default: true}
+      manual-trigger: {required: false, type: string, default: "true"}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: {required: false}
+permissions:
+  contents: read
+  pull-requests: write
 jobs:
   ai-review-architecture:
+    name: AI Review Architecture
     runs-on: ubuntu-latest
+    if: >-
+      ${{ github.event_name == 'pull_request'
+        && inputs.enable-architecture
+        && !github.event.pull_request.draft
+        && !contains(github.event.pull_request.labels.*.name, inputs.skip-label) }}
     steps:
-      - run: echo "gate PR#${{ github.event.pull_request.number }} model=${{ inputs.claude-model }}"
+      - name: gate
+        env:
+          CLAUDE_OAUTH_INPUT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          FP="$(printf '%s' "$CLAUDE_OAUTH_INPUT" | sha256sum | cut -c1-12)"
+          echo "architecture gate PR#${{ github.event.pull_request.number }} auth=$FP"
